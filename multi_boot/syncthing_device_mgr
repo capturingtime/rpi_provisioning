@@ -1,0 +1,274 @@
+#!/bin/bash
+# This script can be ran as a service to manage adding/removing devices automatically for syncthings.
+
+# Device ID regex pattern
+device_id_regex='^([a-zA-Z0-9]{7}-)+[a-zA-Z0-9]{7}$'
+
+# The number of seconds to wait inbetween this service checking.
+check_interval=60
+
+https_port='8384'
+my_api_key=$(syncthing cli config gui apikey get)
+
+self_id=$(syncthing --device-id)
+discover_wait_sec=30
+share_folders=(booth_images) # Space seperated list of folder names
+
+# Check we have values (Syncthing is running)
+if [[ -z "$my_api_key" || -z "$self_id" ]]; then
+    echo "no value for my_api_key or self_id, is ST running? Sleeping 10s and restarting"
+    sleep 10
+    exit 1
+fi
+
+# Check Syncthing API is ready
+check=$(curl -X GET -w "%{http_code}" -o /dev/null -sS -k -H "X-API-Key: ${my_api_key}" \
+            https://127.0.0.1:${https_port}/rest/system/version)
+if [ "$check" != "200"  ]; then
+    echo "Syncthing API is not ready, sleeping for 10s then retry (exit)"
+    sleep 10
+    exit 1
+fi
+
+function check-discovery() {
+    # Grabs output from API for discovered devices
+    echo "$(curl -X GET -sS -k -H "X-API-Key: ${my_api_key}" \
+                https://127.0.0.1:${https_port}/rest/system/discovery)"
+}
+
+function check-pending() {
+    # Grabs output from API for discovered devices
+    echo "$(curl -X GET -sS -k -H "X-API-Key: ${my_api_key}" \
+                https://127.0.0.1:${https_port}/rest/cluster/pending/devices)"
+}
+
+function check-devices() {
+    # Grabs output from API for known Devices
+    echo "$(curl -X GET -sS -k -H "X-API-Key: ${my_api_key}" \
+                https://127.0.0.1:${https_port}/rest/config/devices)"
+}
+
+function get-folder-config() {
+    folder_name=$1
+    # Grabs output from API for a specific folder's config
+    echo "$(curl -X GET -sS -k -H "X-API-Key: ${my_api_key}" \
+                https://127.0.0.1:${https_port}/rest/config/folders/${folder_name})"
+}
+
+function add-device() {
+    # Adds a device locally
+    dev_id=$1
+    device_data=$2
+
+    match=$([[ $dev_id =~ $device_id_regex ]] && echo "true" || echo "false")
+    # Check that the device ID is properly formatted
+    if [ $match == "true" ]; then
+        # Check the JSON string compiles correctly
+        if jq -e . >/dev/null 2>&1 <<<"$device_data"; then
+            result=$(curl -X PUT -w "%{http_code}" -o /dev/null -sS -k -H "X-API-Key: ${my_api_key}" \
+                https://127.0.0.1:${https_port}/rest/config/devices/$1 -d "$device_data")
+
+            if [ "$result" == "200" ]; then
+                echo "Successfully added Device with ID: ${dev_id}"
+            else
+                echo "Failed to add Device with ID: ${dev_id}"
+            fi
+        else
+            echo "invalid json string (jq -e . <<< $device_data) provided to add-device()"
+        fi
+    else
+        echo "invalid device_id provided to add-device(): $dev_id"
+    fi
+    sleep 3 # Give Syncthing a moment to process
+}
+
+function add-device-to-folder() {
+    # Adds a device to a shared folder
+    folder_name=$1
+    folder_data=$2
+
+    folder_config=$(get-folder-config "${folder_name}")
+
+    # get folder data and check that it compiles
+    if jq -e . >/dev/null 2>&1 <<<"${folder_config}"; then
+        # Rebuild {"devices": []} object
+        updated_devices_list=$(jq --argjson new "${folder_data}" \
+            '.devices += [$new] | .devices'  <<< "${folder_config}")
+
+        updated_devices_list="{\"devices\": ${updated_devices_list}}"
+
+    else
+        echo "Queried config data for '${folder_name}' was not parasable by jq. Data:"
+        echo "${folder_config}"
+    fi
+
+    # Check the JSON string compiles correctly
+    if jq -e . >/dev/null 2>&1 <<<"$updated_devices_list"; then
+        result=$(curl -X PATCH -w "%{http_code}" -o /dev/null -sS -k -H "X-API-Key: ${my_api_key}" \
+            https://127.0.0.1:${https_port}/rest/config/folders/${folder_name} -d "${updated_devices_list}")
+
+        if [ "$result" == "200" ]; then
+            echo "Shared folder: ${folder_name} updated with data: ${folder_data}"
+        else
+            echo "Failed to update shared folder: ${folder_name} with data: ${folder_data}"
+        fi
+    else
+        echo "invalid json string (jq -e . <<< $updated_devices_list) when attempting to update '${folder_name}'"
+    fi
+    sleep 3 # Give Syncthing a moment to process
+}
+
+function delete-device() {
+    # Deletes a local device
+    dev_id=$1
+    result=$(curl -X DELETE -w "%{http_code}" -o /dev/null -sS -k -H "X-API-Key: ${my_api_key}" \
+            https://127.0.0.1:${https_port}/rest/config/devices/${dev_id})
+    if [ "$result" == "200" ]; then
+        echo "Delete orphan device: ${dev_id}"
+    else
+        echo "Failed to delete orphan device: ${dev_id}"
+    fi
+}
+
+if [ -z "${my_api_key}" ]; then
+    echo "Unable to get SyncThing's local API KEY. Sleeping for 60s and restarting"
+    sleep 60
+    exit 1
+fi
+
+
+# Check discovery events for peers
+while :
+do
+    added=0
+    removed=0
+    echo "Running device discovery"
+    disc_sleep=5
+    i=$(($discover_wait_sec / $disc_sleep))
+
+    # Ensure discovered_ids is refreshed every check.
+    unset discovered_ids
+
+    # Check if there are any other nodes on the network, if not we dont need to continue.
+    while [ ${#discovered_ids[@]} -lt 1 ]; do
+        # Array of discovered ids
+        discovered_ids=($(jq -r 'keys | @sh' <<< "$(check-discovery)" | tr -d \'))
+
+        # Check if we found something, if not sleep and decrement
+        if [ ${#discovered_ids[@]} -lt 1 ]; then
+            echo "No other devices found, sleeping for $disc_sleep seconds..."
+            sleep $disc_sleep
+            i=$((i-1))
+        fi
+
+        # If we have done this for n seconds (i * sleep) without success, exit
+        if [ $i == 0 ]; then
+            echo "Discovery Failed (None Found) after ${discover_wait_sec} seconds, Exiting"
+            exit 1
+        fi
+    done
+
+    echo "Other devices in discovery queue: ${#discovered_ids[@]}"
+
+    #
+    # Check for any pending IDs, and add them
+    #
+
+    # Array of pending devices that are discovered but not added
+    pending_ids=($(jq -r 'keys | @sh' <<< "$(check-pending)" | tr -d \'))
+
+    # Add any pending devices
+    if [ ${#pending_ids[@]} -gt 0 ]; then
+        echo "Devices pending to be added: ${#pending_ids[@]}"
+        for p_id in "${pending_ids[@]}"; do
+            device="{\"deviceID\": \"${p_id}\", \"introducer\": false}"
+            add-device "${p_id}" "${device}"
+
+            for dir in "${share_folders[@]}"; do
+                # Add a device to a shared folder
+                folder_data="{\"deviceID\": \"${p_id}\"}"
+                add-device-to-folder "${dir}" "${folder_data}"
+            done
+            added=$((added+1))
+        done
+    fi
+
+    # Array of local Device IDs
+    known_ids=($(jq -r '.[].deviceID' <<< "$(check-devices)"))
+
+    #
+    # Check for discovered devices that aren't added
+    #
+
+    for d_id in "${discovered_ids[@]}"; do
+        unset found
+        for k_id in "${known_ids[@]}"; do
+            if [[ "$k_id" == "$self_id" ]]; then
+                # Skip self id, it wont be in the discovery list ever
+                continue
+            fi
+            # Check if there is a match (not orphaned)
+            if [[ "$d_id" == "$k_id" ]]; then
+                found=true
+                break # We can stop looking, we found a match
+            fi
+        done
+        # Check if the d_id was found in the list of known devices
+        if [ "$found" ]; then
+            # This device is already known
+            continue
+        else
+            # We didn't see the d_id in the list of known hosts, add it
+            device="{\"deviceID\": \"${d_id}\", \"introducer\": false}"
+            add-device "${d_id}" "${device}"
+
+            for dir in "${share_folders[@]}"; do
+                # Add a device to a shared folder
+                folder_data="{\"deviceID\": \"${d_id}\"}"
+                add-device-to-folder "${dir}" "${folder_data}"
+            done
+            added=$((added+1))
+        fi
+    done
+
+    # Array of local Device IDs
+    known_ids=($(jq -r '.[].deviceID' <<< "$(check-devices)"))
+
+    #
+    # Check for any known IDs not in the discovery list (orphans probably)
+    #
+
+    # Compare known against discovery, remove orphans
+    for k_id in "${known_ids[@]}"; do
+        unset found
+        # Check for self_id
+        if [[ "$k_id" == "$self_id" ]]; then
+            # Skip self id, it wont be in the discovery list ever
+            continue
+        fi
+
+        for d_id in "${discovered_ids[@]}"; do
+            # Check if there is a match (not orphaned)
+            if [[ "$k_id" == "$d_id" ]]; then
+                found=true
+                break # We can stop looking, we found a match
+            fi
+        done
+
+        # Check if the k_id was found in the list of discovered devices
+        if [ "$found" ]; then
+            # This device isn't an orphan, leave it alone
+            continue
+        else
+            # This device is an orphan, remove it
+            delete-device "$k_id"
+            removed=$((removed+1))
+        fi
+    done
+
+    echo "Devices: $added added"
+    echo "Orphans: $removed removed"
+
+    # Only run this check every n seconds, since others can introduce and thats cleaner
+    sleep ${check_interval}
+done

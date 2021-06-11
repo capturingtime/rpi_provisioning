@@ -1,0 +1,9 @@
+# Static IP - Appended to /etc/dhcpcd.conf during provisioning
+profile static_wlan0
+static ip_address=x.x.x.x/24
+static routers=x.x.x.1
+static domain_name_servers=9.9.9.9 8.8.8.8
+
+# fallback to static profile on eth0
+interface wlan0
+fallback static_wlan0

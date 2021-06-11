@@ -1,0 +1,56 @@
+#!/bin/bash
+# Runs once on 'first boot' of a new display
+
+function validate_ip(){
+    if expr "$1" : '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$' >/dev/null; then
+      for i in 1 2 3 4; do
+        if [ $(echo "$1" | cut -d. -f$i) -gt 255 ]; then
+          return 1
+        fi
+      done
+      echo "valid"
+    else
+      return 1
+    fi
+}
+
+# Show something on screen
+/usr/bin/fbi -d /dev/fb0 -T 1 -1 --noverbose -a -u /boot/resources/provision.jpg
+
+# Set static IP and disable DHCP
+if [ -f "/boot/static_ip" ]; then
+    # Set a static ip on the wireless adapter
+    sudo cp /booth/static_ip /etc/network/interfaces.d/static_wlan
+    sudo systemctl disable dhcpcd.service
+    sudo systemctl restart networking
+fi
+
+# Set Hostname
+mac=$(cat /sys/class/net/wlan0/address | sed 's/://g')
+# Use mac in name
+hostname="ctp_display_${mac}"
+sudo hostnamectl set-hostname new-hostname ${hostname}
+
+# Install and setup SyncThings
+if [ -f "/boot/st_gui_pw" ]; then
+    st_gui_pw=$(cat /boot/st_gui_pw)
+    sudo rm /boot/st_gui_pw
+fi
+
+if [ -f "/boot/syncthing_device_mgr" ]; then
+    sudo cp /boot/syncthing_device_mgr /usr/bin
+    sudo chmod a+x /boot/syncthing_device_mgr
+fi
+
+if [ -f "/boot/install_setup_syncthing.sh" ]; then
+    /boot/install_setup_syncthing.sh -p "${st_gui_pw}" -m "display"
+fi
+
+# Enable the signage service that actually displays content
+sudo systemctl enable ctp_signage_event.service
+
+# Disable the service that called this, because we only want to run it once
+sudo systemctl disable provision_display.service
+
+# Reboot
+sudo reboot now

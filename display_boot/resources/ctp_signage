@@ -1,0 +1,28 @@
+#!/bin/bash
+refresh_min=10
+dir=$1
+
+shopt globstar
+
+# Kill any other fbi processes
+pkill -9 fbi
+
+# Clear the screen
+dd if=/dev/zero of=/dev/fb0
+
+# Runs fbi on a loop, sleeping for {refresh_min} and restarting fbi (refreshes image directory)
+while :
+do
+  # FIXME: Better looping for smoother checking of no files. every 60s the slide blinks.
+  pkill -9 fbi
+  /usr/bin/fbi -d /dev/fb0 -T 1 -1 --noverbose -a /opt/display_marketing_1.jpg
+  files=($(ls ${dir}/*.jpg))
+  #files=(${dir}/*.jpg ${dir}/*.png)
+  if [ ${#files[@]} -gt 0 ]; then
+    /usr/bin/fbi -d /dev/fb0 -T 1 --cachemem 128 --noreadahead --noverbose -a -u -t 7 "${files[@]}"
+    sleep $((${refresh_min}*60))
+  else
+    # check again in 60s
+    sleep 60
+  fi
+done
