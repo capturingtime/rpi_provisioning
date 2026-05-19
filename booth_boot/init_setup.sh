@@ -209,12 +209,13 @@ sudo apt-get install -qq -y fbi > /dev/null
 echo "$(stamp) DEPLOYMENT SCRIPT (L${LINENO}): Install python3-pip"
 sudo apt-get install -y -qq python3-pip > /dev/null
 echo "$(stamp) DEPLOYMENT SCRIPT (L${LINENO}): Install photobooth package (branch: ${branch})"
-sudo pip3 install -e git+https://github.com/capturingtime/photobooth.git@${branch}#egg=photobooth > /dev/null
+sudo pip3 install git+https://github.com/capturingtime/photobooth.git@${branch} > /dev/null
 sudo pip3 install pyzenfolio
-# sudo wget --quiet -O /opt/booth_init.py \
-    # https://raw.githubusercontent.com/capturingtime/photobooth/extend_framework/examples/booth_init.py
-sudo cp /boot/resources/run_booth.py /opt/
-sudo cp /boot/resources/clear_booth.py /opt/
+# Photobooth runtime now ships as console scripts (photobooth-run / photobooth-clear)
+# installed under /usr/local/bin by the pip install above. The two hand-copied files
+# below were the pre-v0.4.0 deployment mechanism — kept commented as a rollback hint.
+# sudo cp /boot/resources/run_booth.py /opt/
+# sudo cp /boot/resources/clear_booth.py /opt/
 
 # Install and setup SyncThings
 if [ -f "/boot/st_gui_pw" ]; then
@@ -248,13 +249,14 @@ After=network.target
 [Service]
 Type=simple
 StandardInput=tty
-StandardOutput=tty
+StandardOutput=append:/var/log/booth_stdout.log
+StandardError=append:/var/log/booth_stdout.log
 
 User=root
 Group=root
 
-ExecStart=python3 /opt/run_booth.py -x -u ctpapi -p ${zen_api_pw}
-ExecStopPost=python3 /opt/clear_booth.py
+ExecStart=/usr/local/bin/photobooth-run
+ExecStopPost=/usr/local/bin/photobooth-clear
 
 [Install]
 WantedBy=default.target
