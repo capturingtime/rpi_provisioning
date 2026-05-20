@@ -238,6 +238,15 @@ if [ -f "/boot/zen_api_pw" ]; then
     sudo rm /boot/zen_api_pw
 fi
 
+# Photobooth runtime configuration (per-booth, not in git)
+sudo mkdir -p /etc/ctp
+if [ -f "/boot/resources/booth.env.example" ]; then
+    sudo cp /boot/resources/booth.env.example /etc/ctp/booth.env.example
+fi
+# Seed an empty booth.env if none exists — defaults from booth_main.py apply
+[ -f /etc/ctp/booth.env ] || sudo touch /etc/ctp/booth.env
+sudo chmod 644 /etc/ctp/booth.env
+
 # Create service file for booth script
 sudo sh -c "cat <<EOF >> /lib/systemd/system/booth.service
 [Unit]
@@ -255,6 +264,7 @@ StandardError=append:/var/log/booth_stdout.log
 User=root
 Group=root
 
+EnvironmentFile=-/etc/ctp/booth.env
 Environment=PYTHONUNBUFFERED=1
 
 ExecStart=/usr/local/bin/photobooth-run
