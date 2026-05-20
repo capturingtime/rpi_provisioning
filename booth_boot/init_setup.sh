@@ -259,7 +259,7 @@ After=network.target
 Type=simple
 StandardInput=tty
 StandardOutput=append:/var/log/booth_stdout.log
-StandardError=append:/var/log/booth_stdout.log
+StandardError=journal
 
 User=root
 Group=root
