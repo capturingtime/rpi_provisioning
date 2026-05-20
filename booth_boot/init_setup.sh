@@ -255,6 +255,8 @@ StandardError=append:/var/log/booth_stdout.log
 User=root
 Group=root
 
+Environment=PYTHONUNBUFFERED=1
+
 ExecStart=/usr/local/bin/photobooth-run
 ExecStopPost=/usr/local/bin/photobooth-clear
 
