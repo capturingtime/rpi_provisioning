@@ -13,8 +13,7 @@ booth_boot/
   init_setup.sh       ← first-boot provisioning: apt deps, pip install, service-unit gen
   resources/
     kiosk             ← X11 kiosk launcher (sourced by xinit)
-    run_booth.py      ← legacy entry script, kept as a rollback artifact only
-    clear_booth.py    ← legacy shutdown script, kept as a rollback artifact only
+    booth.env.example ← documented template for /etc/ctp/booth.env
 ```
 
 ### Deployment model

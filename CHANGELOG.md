@@ -12,18 +12,23 @@ intentionally so a Pi could be reverted from the new pip-install model to the
 old SFTP-into-`/opt/` model if anything broke in the field. With v0.4.0 now
 running cleanly, the rollback path is being removed.
 
+### Removed
+- `booth_boot/resources/run_booth.py` and `booth_boot/resources/clear_booth.py`
+  (the pre-v0.4.0 entry scripts; kept through v0.4.0 as a rollback hint, now
+  gone — the runtime lives in the `photobooth` package).
+- The commented-out `# sudo cp /boot/resources/{run_booth,clear_booth}.py /opt/`
+  block from `init_setup.sh`.
+- The `/boot/zen_api_pw` reading block from `init_setup.sh` — the v0.4.0
+  console scripts do not consume it.
+
 ### Planned
-- Delete `booth_boot/resources/run_booth.py` and
-  `booth_boot/resources/clear_booth.py` (kept as v0.4.0 rollback artifacts).
-- Delete the commented-out `# sudo cp /boot/resources/run_booth.py /opt/` and
-  `clear_booth.py` lines from `booth_boot/init_setup.sh`.
-- Remove the `/boot/zen_api_pw` reading block from `init_setup.sh` — the new
-  `booth_main.py` does not consume it.
 - On live booths: remove `/opt/run_booth.py`, `/opt/clear_booth.py`, and the
   legacy `/boot/src/photobooth/` source tree.
 - Consider dropping `StandardOutput=append:/var/log/booth_stdout.log` from the
   generated unit once we are confident nothing writes there (no more bare
   `print()` calls in the photobooth package).
+- Consider deleting `booth_boot/resources/booth_init.deprecated.py` (named
+  `.deprecated` since the 2021 initial upload; no consumer in the repo).
 
 ## [v0.4.0] — 2026-05-20
 
