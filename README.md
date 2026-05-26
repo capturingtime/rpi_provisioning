@@ -54,3 +54,10 @@ Templates (compositor PNG + JSON sidecar pairs) are deployed out-of-package to
 the schema.
 
 Logs: `/var/log/booth_stdout.log` (appended via the service unit).
+
+## Hardware reference
+
+See [HARDWARE.md](HARDWARE.md) for booth electrical wiring (button
+topology, cat5e pair assignment, ATX dummy load). Currently scoped
+to the v0.4.1 button-wiring redesign; expands as other subsystems
+are validated.
