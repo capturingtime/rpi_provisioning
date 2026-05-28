@@ -4,13 +4,38 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — v0.4.1 (in progress)
+## [Unreleased] — v0.5.0 (in progress)
 
-Cleanup and minor fixes following v0.4.0. This repo's v0.4.1 scope is
-primarily slimming down — v0.4.0 left several rollback artifacts in place
-intentionally so a Pi could be reverted from the new pip-install model to the
-old SFTP-into-`/opt/` model if anything broke in the field. With v0.4.0 now
-running cleanly, the rollback path is being removed.
+No work has started yet. Items carried from v0.4.1:
+- On live booths: remove `/opt/run_booth.py`, `/opt/clear_booth.py`, and
+  the legacy `/boot/src/photobooth/` source tree.
+- Drop `StandardOutput=append:/var/log/booth_stdout.log` from the
+  generated `booth.service` unit (nothing writes there now that v0.4.0
+  converted all `print()` calls to logger calls).
+- Delete `booth_boot/resources/booth_init.deprecated.py` (named
+  `.deprecated` since the 2021 initial upload; no consumer in the repo).
+- Apply the v0.4.1 active-low button rewire to the red and green buttons
+  on the live booth (capture button done; topology documented in
+  `HARDWARE.md`).
+- Finish sizing the ATX dummy load to stop the LED-flutter-on-shutdown.
+  v0.4.1 attempts ladder up via parallel 220 Ω 1/4 W resistors; next
+  step is a 10 Ω 5 W ceramic if parallel stacking is insufficient.
+
+## [v0.4.1] — 2026-05-27
+
+Slim-down release. v0.4.0 left several rollback artifacts in place
+intentionally so a Pi could be reverted from the new pip-install model
+to the old SFTP-into-`/opt/` model if anything broke in the field. With
+v0.4.0 running cleanly on the live booth for ~5 days, the rollback path
+is removed and the first hardware reference doc lands.
+
+### Added
+- `HARDWARE.md` — booth electrical reference. Currently scoped to button
+  wiring (the v0.4.1 active-low topology, parts list, cat5e pair
+  assignment, per-button validation status) and the in-progress ATX
+  dummy-load sizing. Expands as other subsystems are validated.
+- `README.md`: link to `HARDWARE.md` from a new "Hardware reference"
+  section so it's discoverable.
 
 ### Removed
 - `booth_boot/resources/run_booth.py` and `booth_boot/resources/clear_booth.py`
@@ -20,15 +45,6 @@ running cleanly, the rollback path is being removed.
   block from `init_setup.sh`.
 - The `/boot/zen_api_pw` reading block from `init_setup.sh` — the v0.4.0
   console scripts do not consume it.
-
-### Planned
-- On live booths: remove `/opt/run_booth.py`, `/opt/clear_booth.py`, and the
-  legacy `/boot/src/photobooth/` source tree.
-- Consider dropping `StandardOutput=append:/var/log/booth_stdout.log` from the
-  generated unit once we are confident nothing writes there (no more bare
-  `print()` calls in the photobooth package).
-- Consider deleting `booth_boot/resources/booth_init.deprecated.py` (named
-  `.deprecated` since the 2021 initial upload; no consumer in the repo).
 
 ## [v0.4.0] — 2026-05-20
 
