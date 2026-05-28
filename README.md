@@ -13,8 +13,7 @@ booth_boot/
   init_setup.sh       ← first-boot provisioning: apt deps, pip install, service-unit gen
   resources/
     kiosk             ← X11 kiosk launcher (sourced by xinit)
-    run_booth.py      ← legacy entry script, kept as a rollback artifact only
-    clear_booth.py    ← legacy shutdown script, kept as a rollback artifact only
+    booth.env.example ← documented template for /etc/ctp/booth.env
 ```
 
 ### Deployment model
@@ -43,15 +42,24 @@ sudo systemctl restart booth.service
 
 ### Configuration
 
-Runtime configuration constants (`S3_BUCKET`, `BOOTH_DIR`, `CAMERA_MODEL`,
-`CAMERA_STARTUP_CONFIG`, `ACTIVE_TEMPLATE`, `TEMPLATE_BASE_DIR`, `MAX_PRINTS`,
-button labels, screen URLs) live at the top of `photobooth/photobooth/booth_main.py`
-in the `photobooth` repo. (Workstream B will move these to a `/etc/ctp/booth.env`
-file consumed via systemd `EnvironmentFile=`.)
+Per-booth runtime configuration is loaded by systemd from `/etc/ctp/booth.env`
+(see `booth_boot/resources/booth.env.example` for the documented template).
+Each `BOOTH_*` key has a hardcoded default in `photobooth/booth_main.py`, so
+an empty or missing env file is safe.
 
 Templates (compositor PNG + JSON sidecar pairs) are deployed out-of-package to
 `/opt/photobooth/templates/` so they can be swapped without a pip re-install. See
 [photobooth/ARCHITECTURE.md § Template System](../photobooth/ARCHITECTURE.md) for
 the schema.
 
-Logs: `/var/log/booth_stdout.log` (appended via the service unit).
+Logs:
+- `/var/log/photobooth.log` — file handler at DEBUG+ (rotated, 5 × 10 MB
+  backups). Gated by `BOOTH_LOG_LEVEL` in `/etc/ctp/booth.env`.
+- `journalctl -u booth.service` — stderr handler at WARNING+ (operator view).
+
+## Hardware reference
+
+See [HARDWARE.md](HARDWARE.md) for booth electrical wiring (button
+topology, cat5e pair assignment, ATX dummy load). Currently scoped
+to the v0.4.1 button-wiring redesign; expands as other subsystems
+are validated.

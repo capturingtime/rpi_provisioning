@@ -211,11 +211,6 @@ sudo apt-get install -y -qq python3-pip > /dev/null
 echo "$(stamp) DEPLOYMENT SCRIPT (L${LINENO}): Install photobooth package (branch: ${branch})"
 sudo pip3 install git+https://github.com/capturingtime/photobooth.git@${branch} > /dev/null
 sudo pip3 install pyzenfolio
-# Photobooth runtime now ships as console scripts (photobooth-run / photobooth-clear)
-# installed under /usr/local/bin by the pip install above. The two hand-copied files
-# below were the pre-v0.4.0 deployment mechanism — kept commented as a rollback hint.
-# sudo cp /boot/resources/run_booth.py /opt/
-# sudo cp /boot/resources/clear_booth.py /opt/
 
 # Install and setup SyncThings
 if [ -f "/boot/st_gui_pw" ]; then
@@ -230,12 +225,6 @@ fi
 
 if [ -f "/boot/install_setup_syncthing.sh" ]; then
     /boot/install_setup_syncthing.sh -p "${st_gui_pw}" -m "hub"
-fi
-
-# Read Zenfolio API password
-if [ -f "/boot/zen_api_pw" ]; then
-    zen_api_pw=$(cat /boot/zen_api_pw)
-    sudo rm /boot/zen_api_pw
 fi
 
 # Photobooth runtime configuration (per-booth, not in git)
